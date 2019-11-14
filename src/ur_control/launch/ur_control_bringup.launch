@@ -1,0 +1,14 @@
+<launch>
+ <arg name="moveit_config" default="ur5_moveit_config" />
+
+ <include file="$(find ur_modern_driver)/launch/ur5_bringup.launch" />
+
+ <include file="$(find ur5_moveit_config)/launch/move_group.launch" />
+
+ <node name="force_sensor_pub" pkg="force_sensor" type="force_torque_pub" />
+
+ <!-- include file="$(find ur5_moveit_config)/launch/moveit_rviz.launch" /-->
+
+ <!-- node name="ur_control" pkg="ur_control" type="moveto" / -->
+
+</launch>

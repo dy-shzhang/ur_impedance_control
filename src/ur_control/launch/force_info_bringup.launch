@@ -1,0 +1,4 @@
+<launch>
+    <node name ="ur_control" pkg="ur_control" type="moveto2" />
+    <rosparam command="load" file="$(find ur5_moveit_config)/config/kinematics.yaml"/>  
+</launch>

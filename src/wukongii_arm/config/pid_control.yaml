@@ -1,0 +1,31 @@
+larm1joint_P: 100.
+larm1joint_I: 0.
+larm1joint_D: 1.
+
+larm2joint_P: 100.
+larm2joint_I: 0.
+larm2joint_D: 1.
+
+larm3joint_P: 100.
+larm3joint_I: 0.
+larm3joint_D: 1.
+
+larm4joint_P: 100.
+larm4joint_I: 0.
+larm4joint_D: 1.
+
+rarm1joint_P: 100.
+rarm1joint_I: 0.
+rarm1joint_D: 1.
+
+rarm2joint_P: 100.
+rarm2joint_I: 0.
+rarm2joint_D: 1.
+
+rarm3joint_P: 100.
+rarm3joint_I: 0.
+rarm3joint_D: 1.
+
+rarm4joint_P: 100.
+rarm4joint_I: 0.
+rarm4joint_D: 1.

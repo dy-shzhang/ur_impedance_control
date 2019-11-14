@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: left_arm_config
+    relative_path: urdf/left_arm.urdf
+    xacro_args: "--inorder "
+  SRDF:
+    relative_path: config/left_hand.srdf
+  CONFIG:
+    author_name: shz
+    author_email: shzhang2007@zju.edu.cn
+    generated_timestamp: 1572938283

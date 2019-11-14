@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.5.0-0-g9aa0fdb  Build Version: 1.5.7004.21443
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot name="left_hand">
+    <link name="base_link" />
+    <joint name="base_link-base_fixed_joint" type="fixed">
+        <origin xyz="0. 0. 0." rpy="0. 0. 0." />
+        <parent link="base_link" />
+        <child link="baselink" />
+    </joint>
+    <link name="baselink">
+        
+<inertial>
+            <origin xyz="9.2808E-05 2.8344E-05 -0.02599" rpy="0 0 0" />
+            <mass value="0.055289" />
+            <inertia ixx="4.2962E-05" ixy="2.1289E-08" ixz="7.1999E-08" iyy="4.3085E-05" iyz="4.8986E-08" izz="3.9367E-05" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/baselink.STL" />
+            </geometry>
+            <material name="white">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/baselink.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="AJOINT" type="revolute">
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <parent link="baselink" />
+        <child link="B" />
+        <axis xyz="0 0 -1" />
+        <limit lower="-3.1415926" upper="3.1415926" effort="280" velocity="3.5" />
+    </joint>
+    <link name="B">
+        
+<inertial>
+            <origin xyz="-1.1589E-07 0.039607 0.049719" rpy="0 0 0" />
+            <mass value="0.073171" />
+            <inertia ixx="9.6616E-05" ixy="-3.7441E-10" ixz="-1.2139E-08" iyy="7.621E-05" iyz="-2.5033E-05" izz="6.6682E-05" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/B.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/B.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="BJOINT" type="revolute">
+        <origin xyz="0 0 0.0615" rpy="1.5708 0 0" />
+        <parent link="B" />
+        <child link="C" />
+        <axis xyz="0 0 -1" />
+        <limit lower="-3.1415926" upper="3.1415926" effort="280" velocity="3" />
+    </joint>
+    <link name="C">
+        
+<inertial>
+            <origin xyz="0.0017981 -4.4E-06 0.016039" rpy="0 0 0" />
+            <mass value="0.069017" />
+            <inertia ixx="6.1451E-05" ixy="3.4922E-08" ixz="-1.2705E-06" iyy="5.9562E-05" iyz="-6.3269E-08" izz="4.968E-05" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/C.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/C.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="CJOINT" type="revolute">
+        <origin xyz="0 0 0.0235" rpy="0 1.5708 0" />
+        <parent link="C" />
+        <child link="D" />
+        <axis xyz="0 0 -1" />
+        <limit lower="-3.1415926" upper="3.1415926" effort="280" velocity="3" />
+    </joint>
+    <link name="D">
+        
+<inertial>
+            <origin xyz="-0.0013073 -0.076946 0.069296" rpy="0 0 0" />
+            <mass value="0.24687" />
+            <inertia ixx="0.0016642" ixy="-2.4544E-05" ixz="-1.1677E-06" iyy="0.00027122" iyz="-0.00014606" izz="0.0015866" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/D.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/D.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="DJOINT" type="revolute">
+        <origin xyz="-0.0065442 -0.24991 0.053" rpy="0 0 -0.02618" />
+        <parent link="D" />
+        <child link="E" />
+        <axis xyz="0 0 1" />
+        <limit lower="-3.1415926" upper="3.1415926" effort="280" velocity="3" />
+    </joint>
+    <link name="E">
+        
+<inertial>
+            <origin xyz="0.0097542 -0.18871 0.0042571" rpy="0 0 0" />
+            <mass value="0.25604" />
+            <inertia ixx="0.0024683" ixy="7.3774E-05" ixz="-4.1995E-07" iyy="0.0001277" iyz="9.9536E-06" izz="0.0024512" />
+        </inertial>
+
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/E.STL" />
+            </geometry>
+            <material name="">
+                <color rgba="1 1 1 1" />
+            </material>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <mesh filename="package://left_hand/meshes/E.STL" />
+            </geometry>
+        </collision>
+    </link>
+    <joint name="ee_fixed_joint" type="fixed">
+        <origin xyz="0 -0.24 0" rpy="0 0 0" />
+        <parent link="E" />
+        <child link="ee_link" />
+    </joint>
+    <link name="ee_link">
+        <collision>
+            <geometry>
+                <box size="0.01 0.01 0.01" />
+            </geometry>
+            <origin rpy="0 0 0" xyz="0 0 0" />
+        </collision>
+        
+<inertial>
+            <mass value="0.1" />
+            <inertia ixx="0.03" iyy="0.03" izz="0.03" ixy="0.0" ixz="0.0" iyz="0.0" />
+        </inertial>
+
+    </link>
+    
+<transmission name="trans_AJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="AJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="AJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_BJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="BJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="BJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_CJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="CJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="CJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_DJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="DJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="DJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <gazebo>
+        <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+            <robotNamespace>/</robotNamespace>
+        </plugin>
+    </gazebo>
+    <transmission name="trans_AJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="AJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="AJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_BJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="BJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="BJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_CJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="CJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="CJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <transmission name="trans_DJOINT">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="DJOINT">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="DJOINT_motor">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <gazebo>
+        <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+            <robotNamespace>/</robotNamespace>
+        </plugin>
+    </gazebo>
+</robot>

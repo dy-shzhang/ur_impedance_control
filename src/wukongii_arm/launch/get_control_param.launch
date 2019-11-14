@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Load  YAML file to parameter server -->
+  <rosparam file="$(find wukongii_arm)/config/pid_control.yaml" command="load"/>
+
+</launch>
