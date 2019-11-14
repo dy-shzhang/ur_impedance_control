@@ -58,7 +58,9 @@ protected:
     Eigen::Matrix<double,3,1> cartesianForceTarget;//笛卡尔空间中力期望值,世界坐标系下
     Eigen::Matrix<double,3,1> cartesianTorqueTarget; //期望力矩值,世界坐标系下
     Eigen::Matrix<double,3,1> cartesianXYZTarget; //笛卡尔xyz速度信息
+    Eigen::Matrix<double,3,1> cartesianXYZFormer;
     Eigen::Matrix<double,3,1> cartesianRPYTarget; //笛卡尔rpy速度信息
+    Eigen::Matrix<double,3,1> cartesianRPYFormer;
 
 
 
@@ -114,11 +116,16 @@ public:
         TMP2FORCE<<0.5,sqrt(3)/2.,0, -sqrt(3)/2.,0.5,0, 0,0,1;
         //TMP2FORCE<<-sqrt(3)/2.,0.5,0,-0.5,-sqrt(3)/2.,0,0,0,1;
         wrist2force = WRIST2TMP*TMP2FORCE;
-        MF<<1.,0.,0., 0.,1.,0., 0.,0.,1.;
-        MT<<1,0.,0., 0.,1,0., 0.,0.,1;
-        BF<<1,0.,0., 0.,1,0., 0.,0.,1;
-        BT<<1.,0.,0., 0.,1.,0., 0.,0.,1.;
-        KF<<1.,0.,0., 0.,1.,0., 0.,0.,1.;
+
+        //MF =10 BF =100
+        //MT =1 BT = 50
+        //这组参数抖动很小很小,不需要死区!!!!!
+        //好的莫名其妙.....
+        MF<<10,0.,0., 0.,10,0., 0.,0.,10;
+        MT<<0.1,0.,0., 0.,0.1,0., 0.,0.,0.1;
+        BF<<30,0.,0., 0.,30,0., 0.,0.,30; //10 500
+        BT<<3.,0.,0., 0.,3.,0., 0.,0.,3.;
+        //KF<<100.,0.,0., 0.,100.,0., 0.,0.,100.;
         currentCartesianForce << 0.,0.,0.;
         currentCartesianTorque << 0.,0.,0.;
         cartesianForceTarget << 0,0,0;
@@ -133,6 +140,9 @@ public:
             toolVelocityRecord[i]=0;
             cartesianForceRecord[i]=0;
         }
+
+        cartesianXYZFormer << 0,0,0;
+        cartesianRPYFormer << 0,0,0;
     
     }
     bool initRobotState(){ //初始化robot 到基础位置
@@ -238,12 +248,25 @@ public:
         // XYZVelocity = velocity2world * XYZVelocity;
         // RPYVelocity = velocity2world * RPYVelocity;
         // 速度方向
+
         for(int i=0;i<3;i++){
             currentSpeedRecordMsg.angle[i+3] = -1*XYZVelocity(i);
         }
-        //ROS_INFO_STREAM("current velocity "<<XYZVelocity);
-        cartesianXYZTarget = (1*MF+BF).inverse()*(currentCartesianForce- cartesianForceTarget +1*MF*XYZVelocity);
-        cartesianRPYTarget =(1*MT+BT).inverse()*(currentCartesianTorque - cartesianTorqueTarget +1*MT*RPYVelocity);
+        cartesianXYZTarget = (125*MF+BF).inverse()*(currentCartesianForce- cartesianForceTarget + 125*MF*cartesianXYZFormer); //currentCartesianForce- cartesianForceTarget
+        //cartesianXYZFormer = cartesianXYZTarget;
+        // for(int i=0;i<3;i++){
+        //         if(cartesianXYZTarget(i)<0.005 && cartesianXYZTarget(i)>-0.005)
+        //             cartesianXYZTarget(i) = 0.;
+        // }
+        // for(int i=0;i<3;i++){
+        //         if(cartesianXYZTarget(i)-cartesianXYZFormer(i)<0.005 && cartesianXYZTarget(i)-cartesianXYZFormer(i)>-0.005)
+        //             cartesianXYZTarget(i) = cartesianXYZFormer(i);
+        // }
+        cartesianXYZFormer = cartesianXYZTarget;
+
+        cartesianRPYTarget =(125*MT+BT).inverse()*(currentCartesianTorque - cartesianTorqueTarget +125*MT*cartesianRPYFormer);
+
+        cartesianRPYFormer =cartesianRPYTarget;
 
         cartesianXYZTarget =velocity2world*cartesianXYZTarget;
         cartesianRPYTarget =velocity2world*cartesianRPYTarget;
@@ -309,16 +332,16 @@ public:
             }
             else{
                 meanValueForceTorqueFilter();
-                impedanceControlPID();
-                //impedanceControl();
+                //impedanceControlPID();
+                impedanceControl();
             }
             //ROS_INFO_STREAM("target velocity "<<cartesianXYZTarget);
 
             ROS_INFO_STREAM(currentCartesianForce);
-            cartesianVelocityTargetMsg.points[0].accelerations[0]=3;
+            cartesianVelocityTargetMsg.points[0].accelerations[0]=1;
             for(int i=0;i<3;i++){
                 cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
-                cartesianVelocityTargetMsg.points[0].velocities[i+3] = 0;//cartesianRPYTarget(i)
+                cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
 
                 currentSpeedRecordMsg.angle[i] = cartesianXYZTarget(i);
                 //currentSpeedRecordMsg.angle[i+3] = currentCartesianTorque(i);
