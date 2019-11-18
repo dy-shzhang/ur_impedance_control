@@ -110,7 +110,7 @@ public:
         cartesianVelocityTargetMsg.points[0].accelerations[0]=3;
 
         PI=3.141592653589793238;
-        endEffectOffset<<0.0,0.0823,0.0;
+        endEffectOffset<<0.0,0.0823,0.0; //+ 0,0.25,0 是手爪末端位置
         Eigen::Matrix3d WRIST2TMP,TMP2FORCE;
         WRIST2TMP<< 1,0,0, 0,0,1, 0,-1,0;
         TMP2FORCE<<0.5,sqrt(3)/2.,0, -sqrt(3)/2.,0.5,0, 0,0,1;
@@ -194,19 +194,6 @@ public:
     }
     void meanValueForceTorqueFilter(double times=5.){
 
-        // static int count =0;
-        // ROS_INFO_STREAM("COUNT ="<<count);
-        // if(count==0){
-        //     currentCartesianForce = currentCartesianForce-currentCartesianForce;
-        //     currentCartesianTorque =currentCartesianTorque -currentCartesianTorque;
-        // }
-        // currentCartesianForce =currentCartesianForce + rawCartesianForce/times;
-        // currentCartesianTorque = currentCartesianTorque +rawCartesianTorque/times;
-        // if(count==4)
-        //     count=0;
-        // else
-        //     count++;
-
         currentCartesianForce = rawCartesianForce - forceBias;
         currentCartesianTorque = rawCartesianTorque - torqueBias;
 
@@ -245,23 +232,16 @@ public:
         Eigen::Matrix<double,3,1> XYZVelocity,RPYVelocity;
         XYZVelocity << endVelocity(0,0),endVelocity(1,0),endVelocity(2,0);
         RPYVelocity << endVelocity(3,0),endVelocity(4,0),endVelocity(5,0);
-        // XYZVelocity = velocity2world * XYZVelocity;
-        // RPYVelocity = velocity2world * RPYVelocity;
-        // 速度方向
 
         for(int i=0;i<3;i++){
             currentSpeedRecordMsg.angle[i+3] = -1*XYZVelocity(i);
         }
         cartesianXYZTarget = (125*MF+BF).inverse()*(currentCartesianForce- cartesianForceTarget + 125*MF*cartesianXYZFormer); //currentCartesianForce- cartesianForceTarget
-        //cartesianXYZFormer = cartesianXYZTarget;
-        // for(int i=0;i<3;i++){
-        //         if(cartesianXYZTarget(i)<0.005 && cartesianXYZTarget(i)>-0.005)
-        //             cartesianXYZTarget(i) = 0.;
-        // }
-        // for(int i=0;i<3;i++){
-        //         if(cartesianXYZTarget(i)-cartesianXYZFormer(i)<0.005 && cartesianXYZTarget(i)-cartesianXYZFormer(i)>-0.005)
-        //             cartesianXYZTarget(i) = cartesianXYZFormer(i);
-        // }
+        cartesianXYZFormer = cartesianXYZTarget;
+        for(int i=0;i<3;i++){
+                if(cartesianXYZTarget(i)<0.0005 && cartesianXYZTarget(i)>-0.0005)
+                    cartesianXYZTarget(i) = 0.;
+        }
         cartesianXYZFormer = cartesianXYZTarget;
 
         cartesianRPYTarget =(125*MT+BT).inverse()*(currentCartesianTorque - cartesianTorqueTarget +125*MT*cartesianRPYFormer);
@@ -270,23 +250,6 @@ public:
 
         cartesianXYZTarget =velocity2world*cartesianXYZTarget;
         cartesianRPYTarget =velocity2world*cartesianRPYTarget;
-
-
-        // for(int i=0;i<3;i++){
-        //     if(cartesianXYZTarget(i)<0.05 && cartesianXYZTarget(i)>=0)
-        //         cartesianXYZTarget(i) =20*cartesianXYZTarget(i)*cartesianXYZTarget(i);
-        //     else if(cartesianXYZTarget(i)>-0.05 && cartesianXYZTarget(i)<0)
-        //         cartesianXYZTarget(i) =-20*cartesianXYZTarget(i)*cartesianXYZTarget(i);
-        //     // if(cartesianXYZTarget(i)<0.001 && cartesianXYZTarget(i)>-0.001)
-        //     //     cartesianXYZTarget(i)=0.;
-
-        //     // if(cartesianRPYTarget(i)<0.05 && cartesianRPYTarget(i)>=0)
-        //     //     cartesianRPYTarget(i) =20*cartesianRPYTarget(i)*cartesianRPYTarget(i);
-        //     // else if(cartesianRPYTarget(i)>-0.05 && cartesianRPYTarget(i)<0)
-        //     //     cartesianRPYTarget(i) =-20*cartesianRPYTarget(i)*cartesianRPYTarget(i);
-        //     // if(cartesianRPYTarget(i)<0.001 && cartesianRPYTarget(i)>-0.001)
-        //     //     cartesianRPYTarget(i)=0.;
-        // }
     }
 
     Eigen::Matrix<double,6,1> getEndVelocity(){
@@ -297,6 +260,46 @@ public:
         return endEffortVelocity;
 
     }
+
+    void PTHybirControl(){
+        bool initDone =initRobotState(); //默认位置
+        if(!initDone){
+            ROS_INFO("robot init err, system shut down");
+            return;
+        }
+        ROS_INFO("robot inited");
+        int pause;
+        ROS_INFO("push any key to continue :");
+        std::cin>>pause;
+
+        double x=110,y=486,z=430;  //毫米.圆心?
+        double xtarget =200;
+
+        int countTime=0;
+        while(ros::ok()){
+            ros::spinOnce();
+            kinematic_state->setVariablePositions(currentJointPosition);
+            kinematic_state->getJacobian(joint_model_group,kinematic_state->getLinkModel("wrist_3_link"),endEffectOffset,jacobian);
+            tf =kinematic_state->getGlobalLinkTransform("wrist_3_link");
+            Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
+            xtarget = 125*(0.1*sin(0.008*countTime)+0.11-currentCartesianEndEffortPositon(0));
+            cartesianVelocityTargetMsg.points[0].accelerations[0]=1;
+            for(int i=0;i<3;i++){
+                cartesianVelocityTargetMsg.points[0].velocities[i] = 0;
+                cartesianVelocityTargetMsg.points[0].velocities[i+3] = 0;
+            }
+            currentSpeedRecordMsg.angle[0] = 0.1*sin(0.008*countTime)+0.11;
+            currentSpeedRecordMsg.angle[1] = currentCartesianEndEffortPositon(0);
+            cartesianVelocityTargetMsg.points[0].velocities[0] = xtarget;
+            pub_speed.publish(cartesianVelocityTargetMsg);
+            pub_record.publish(currentSpeedRecordMsg);
+            countTime+=1;
+            loop_rate.sleep();
+        }
+        ros::waitForShutdown();
+
+    }
+
     void run(){
         bool initDone =initRobotState(); //默认位置
         if(!initDone){
@@ -335,9 +338,6 @@ public:
                 //impedanceControlPID();
                 impedanceControl();
             }
-            //ROS_INFO_STREAM("target velocity "<<cartesianXYZTarget);
-
-            ROS_INFO_STREAM(currentCartesianForce);
             cartesianVelocityTargetMsg.points[0].accelerations[0]=1;
             for(int i=0;i<3;i++){
                 cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
@@ -369,5 +369,6 @@ int main(int argc,char** argv){
     spinner.start();
     ImpedanceControl imp_;
     imp_.run();
+    //imp_.PTHybirControl();
     return 0;
 }
