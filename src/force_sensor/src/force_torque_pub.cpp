@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
 	FTSensors::ATI::NetFT netft;
 	netft.setIP("192.168.1.30");
 	ROS_INFO("set frequency");
-	netft.setFilterFrequency(FTSensors::ATI::FilterFrequency::NO_FILTER); //NO_FILTER FILTER_35_HZ
+	netft.setFilterFrequency(FTSensors::ATI::FilterFrequency::FILTER_5_HZ); //NO_FILTER FILTER_35_HZ
 	
 	netft.setForceUnit(FTSensors::ATI::ForceUnit::N);
 	netft.setTorqueUnit(FTSensors::ATI::TorqueUnit::Nm);

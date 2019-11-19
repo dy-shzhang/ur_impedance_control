@@ -53,6 +53,8 @@ protected:
     //cartesian 空间相关变量
     Eigen::Vector3d rawCartesianForce; //原始值-force
     Eigen::Vector3d rawCartesianTorque; //原始值-torque
+    Eigen::Vector3d rawForce,rawTorque;
+
     Eigen::Vector3d currentCartesianForce; //当前末端笛卡尔力,世界坐标系下
     Eigen::Vector3d currentCartesianTorque;//当前末端笛卡尔力矩
     Eigen::Matrix<double,3,1> cartesianForceTarget;//笛卡尔空间中力期望值,世界坐标系下
@@ -121,14 +123,14 @@ public:
         //MT =1 BT = 50
         //这组参数抖动很小很小,不需要死区!!!!!
         //好的莫名其妙.....
-        MF<<10,0.,0., 0.,10,0., 0.,0.,10;
-        MT<<0.1,0.,0., 0.,0.1,0., 0.,0.,0.1;
-        BF<<30,0.,0., 0.,30,0., 0.,0.,30; //10 500
-        BT<<3.,0.,0., 0.,3.,0., 0.,0.,3.;
+        MF<<10,0.,0., 0.,10,0., 0.,0.,10; //10
+        MT<<0.5,0.,0., 0.,0.5,0., 0.,0.,0.5;
+        BF<<1250,0.,0., 0.,1250,0., 0.,0.,1250; //30 10 500
+        BT<<62.5,0.,0., 0.,62.5,0., 0.,0.,62.5;
         //KF<<100.,0.,0., 0.,100.,0., 0.,0.,100.;
         currentCartesianForce << 0.,0.,0.;
         currentCartesianTorque << 0.,0.,0.;
-        cartesianForceTarget << 0,0,0;
+        cartesianForceTarget << 0,0,-5;
         cartesianTorqueTarget << 0,0,0;
         perErrInForce<<0.,0.,0.;
         perErrInTorque<<0.,0.,0.;
@@ -171,17 +173,11 @@ public:
 
     void getNewForceTorque(const force_sensor::Force_Torque& msg){//更新笛卡尔传感器力矩值
         Eigen::Vector3d tmpForce(msg.fx,msg.fy,msg.fz);
+        rawForce = tmpForce;
         rawCartesianForce = world2force*tmpForce;
 
-        // for(int i=0;i<3;i++){
-        //     if(rawCartesianForce(i)>5)
-        //         rawCartesianForce(i) = 5;
-        //     else if(rawCartesianForce(i) <-5)
-        //         rawCartesianForce(i) =-5;
-        // }
-        //ROS_INFO_STREAM("force"<<rawCartesianForce);
-
         Eigen::Vector3d tmpTorque(msg.tx,msg.ty,msg.tz);
+        rawTorque = tmpTorque;
         rawCartesianTorque = world2force*tmpTorque;
         //ROS_INFO_STREAM("torque"<<rawCartesianTorque);
     }
@@ -196,6 +192,9 @@ public:
 
         currentCartesianForce = rawCartesianForce - forceBias;
         currentCartesianTorque = rawCartesianTorque - torqueBias;
+
+        rawForce  = rawForce - world2force.inverse()*forceBias;
+        rawTorque = rawTorque - world2force.inverse()*torqueBias;
 
     }
     void impedanceControlPID(){
@@ -233,9 +232,9 @@ public:
         XYZVelocity << endVelocity(0,0),endVelocity(1,0),endVelocity(2,0);
         RPYVelocity << endVelocity(3,0),endVelocity(4,0),endVelocity(5,0);
 
-        for(int i=0;i<3;i++){
-            currentSpeedRecordMsg.angle[i+3] = -1*XYZVelocity(i);
-        }
+        // for(int i=0;i<3;i++){
+        //     currentSpeedRecordMsg.angle[i+3] = -1*XYZVelocity(i);
+        // }
         cartesianXYZTarget = (125*MF+BF).inverse()*(currentCartesianForce- cartesianForceTarget + 125*MF*cartesianXYZFormer); //currentCartesianForce- cartesianForceTarget
         cartesianXYZFormer = cartesianXYZTarget;
         for(int i=0;i<3;i++){
@@ -246,10 +245,33 @@ public:
 
         cartesianRPYTarget =(125*MT+BT).inverse()*(currentCartesianTorque - cartesianTorqueTarget +125*MT*cartesianRPYFormer);
 
+        if(cartesianXYZTarget(2)>0.1 || cartesianXYZTarget(2)<-0.1){
+            if(cartesianXYZTarget(2)>0.1)
+                cartesianXYZTarget(2) = 0.1;
+            else
+                cartesianXYZTarget(2) = -0.1;
+        }
+
         cartesianRPYFormer =cartesianRPYTarget;
 
         cartesianXYZTarget =velocity2world*cartesianXYZTarget;
+        
+
         cartesianRPYTarget =velocity2world*cartesianRPYTarget;
+    }
+
+    void impedanceControlInSensorFrame(){ //在传感器坐标系下的阻抗控制
+        cartesianXYZTarget = (125*MF+BF).inverse()*(rawForce- cartesianForceTarget + 125*MF*cartesianXYZFormer);
+
+        cartesianXYZFormer = cartesianXYZTarget;
+
+        cartesianRPYTarget =(125*MT+BT).inverse()*(rawTorque - cartesianTorqueTarget +125*MT*cartesianRPYFormer);
+
+        cartesianRPYFormer =cartesianRPYTarget;
+
+        cartesianXYZTarget =velocity2world*world2force*cartesianXYZTarget;
+
+        cartesianRPYTarget =velocity2world*world2force*cartesianRPYTarget;
     }
 
     Eigen::Matrix<double,6,1> getEndVelocity(){
@@ -335,16 +357,16 @@ public:
             }
             else{
                 meanValueForceTorqueFilter();
-                //impedanceControlPID();
-                impedanceControl();
+                //impedanceControl();
+                impedanceControlInSensorFrame();
             }
             cartesianVelocityTargetMsg.points[0].accelerations[0]=1;
             for(int i=0;i<3;i++){
-                cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
-                cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
+                cartesianVelocityTargetMsg.points[0].velocities[i] = 0;//cartesianXYZTarget(i)
+                cartesianVelocityTargetMsg.points[0].velocities[i+3] = 0;//cartesianRPYTarget(i)
 
-                currentSpeedRecordMsg.angle[i] = cartesianXYZTarget(i);
-                //currentSpeedRecordMsg.angle[i+3] = currentCartesianTorque(i);
+                currentSpeedRecordMsg.angle[i] = rawForce(i);
+                currentSpeedRecordMsg.angle[i+3] = rawTorque(i);
 
                 toolVelocityRecord[i] = cartesianXYZTarget(i);
                 toolVelocityRecord[i+3] = cartesianRPYTarget(i);
@@ -352,7 +374,6 @@ public:
                 cartesianForceRecord[i] = currentCartesianForce(i);
                 cartesianForceRecord[i+3] = currentCartesianTorque(i);
             }
-            
             pub_speed.publish(cartesianVelocityTargetMsg);
             pub_record.publish(currentSpeedRecordMsg);
             loop_rate.sleep();
