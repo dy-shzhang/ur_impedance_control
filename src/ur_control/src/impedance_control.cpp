@@ -112,7 +112,7 @@ public:
         cartesianVelocityTargetMsg.points[0].accelerations[0]=3;
 
         PI=3.141592653589793238;
-        endEffectOffset<<0.0,0.0823,0.0; //+ 0,0.25,0 是手爪末端位置
+        endEffectOffset<<0.0,0.3232,0.0; //+ 0,0.25,0 是手爪末端位置
         Eigen::Matrix3d WRIST2TMP,TMP2FORCE;
         WRIST2TMP<< 1,0,0, 0,0,1, 0,-1,0;
         TMP2FORCE<<0.5,sqrt(3)/2.,0, -sqrt(3)/2.,0.5,0, 0,0,1;
@@ -123,14 +123,15 @@ public:
         //MT =1 BT = 50
         //这组参数抖动很小很小,不需要死区!!!!!
         //好的莫名其妙.....
-        MF<<10,0.,0., 0.,10,0., 0.,0.,10; //10
+        MF<<1,0.,0., 0.,1,0., 0.,0.,1; //10
+        BF<<0,0.,0., 0.,0,0., 0.,0.,0; //30 10 500
+        
         MT<<0.5,0.,0., 0.,0.5,0., 0.,0.,0.5;
-        BF<<1250,0.,0., 0.,1250,0., 0.,0.,1250; //30 10 500
-        BT<<62.5,0.,0., 0.,62.5,0., 0.,0.,62.5;
+        BT<<20,0.,0., 0.,20,0., 0.,0.,20;
         //KF<<100.,0.,0., 0.,100.,0., 0.,0.,100.;
         currentCartesianForce << 0.,0.,0.;
         currentCartesianTorque << 0.,0.,0.;
-        cartesianForceTarget << 0,0,-5;
+        cartesianForceTarget << 0,0,10;
         cartesianTorqueTarget << 0,0,0;
         perErrInForce<<0.,0.,0.;
         perErrInTorque<<0.,0.,0.;
@@ -150,7 +151,7 @@ public:
     bool initRobotState(){ //初始化robot 到基础位置
         group.setGoalJointTolerance(0.001);
         group.setMaxVelocityScalingFactor(0.1);
-        double angle[6]={-PI/2.,-PI/2.,-PI/2.,-PI/2.,PI/2.,0.};
+        double angle[6]={-PI/2.,-PI/2.+0.18,-PI/2.+0.18,-PI/2.,PI/2.,0.};
         std::vector<double> joint_value(angle,angle+6);
         group.setJointValueTarget(joint_value);
         planSuccess = group.plan(planner);
@@ -341,7 +342,10 @@ public:
             kinematic_state->getJacobian(joint_model_group,kinematic_state->getLinkModel("wrist_3_link"),endEffectOffset,jacobian);
             tf =kinematic_state->getGlobalLinkTransform("wrist_3_link");
             world2force = tf.rotation()*wrist2force;
-            getEndVelocity();
+            Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
+            //ROS_INFO_STREAM("END POSITION "<<currentCartesianEndEffortPositon);
+            //ROS_INFO_STREAM("W2F"<<world2force);
+            Eigen::Matrix<double,6,1>endvel=getEndVelocity();
             if(sensorBias && countTime<10){
                 if(rawCartesianForce(0)<0.0001 && rawCartesianForce(0)>-0.0001){
                 }
@@ -357,19 +361,19 @@ public:
             }
             else{
                 meanValueForceTorqueFilter();
-                //impedanceControl();
-                impedanceControlInSensorFrame();
+                impedanceControl();
+                //impedanceControlInSensorFrame();
             }
             cartesianVelocityTargetMsg.points[0].accelerations[0]=1;
             for(int i=0;i<3;i++){
-                cartesianVelocityTargetMsg.points[0].velocities[i] = 0;//cartesianXYZTarget(i)
-                cartesianVelocityTargetMsg.points[0].velocities[i+3] = 0;//cartesianRPYTarget(i)
+                cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
+                cartesianVelocityTargetMsg.points[0].velocities[i+3] = -cartesianRPYTarget(i);//cartesianRPYTarget(i)
 
-                currentSpeedRecordMsg.angle[i] = rawForce(i);
-                currentSpeedRecordMsg.angle[i+3] = rawTorque(i);
+                currentSpeedRecordMsg.angle[i] = cartesianXYZTarget(i);
+                currentSpeedRecordMsg.angle[i+3] = endvel(i);
 
                 toolVelocityRecord[i] = cartesianXYZTarget(i);
-                toolVelocityRecord[i+3] = cartesianRPYTarget(i);
+                toolVelocityRecord[i+3] = -cartesianRPYTarget(i);
 
                 cartesianForceRecord[i] = currentCartesianForce(i);
                 cartesianForceRecord[i+3] = currentCartesianTorque(i);

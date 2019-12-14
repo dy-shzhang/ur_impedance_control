@@ -84,9 +84,12 @@ int main(int argc, char *argv[])
 		}
 		if(nc==11){
 			msg =oldmsg;
+			ROS_INFO("KONG 11");
 		}
-		else
+		else{
 			oldmsg =msg;
+			ROS_INFO("FEI KONG");		
+		}
 
 		{
 			msgToSent.fx += msg.fx/4.;
