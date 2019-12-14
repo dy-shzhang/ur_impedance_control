@@ -1,0 +1,37 @@
+imp_mf:
+ x: 10.
+ y: 10.
+ z: 10.
+
+imp_bf:
+ x: 200.
+ y: 200.
+ z: 200.
+
+imp_mt:
+ x: 1
+ y: 1
+ z: 1
+
+imp_bt:
+ x: 20.
+ y: 20.
+ z: 20.
+
+impedance_force_target:
+  x: 0.
+  y: 0.
+  z: 10.
+
+impedance_torque_target:
+  x: 0.
+  y: 0.
+  z: 0.
+
+start_position:
+  x1: -90.
+  x2: -85.
+  x3: -80.
+  x4: -103.
+  x5: 90.
+  x6: -3.

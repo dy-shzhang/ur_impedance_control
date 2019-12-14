@@ -7,6 +7,8 @@
 
  <node name="force_sensor_pub" pkg="force_sensor" type="force_torque_pub" />
 
+ <rosparam file="$(find ur_control)/config/impParam.yaml" command="load" />
+
  <!-- include file="$(find ur5_moveit_config)/launch/moveit_rviz.launch" /-->
 
  <!-- node name="ur_control" pkg="ur_control" type="moveto" / -->

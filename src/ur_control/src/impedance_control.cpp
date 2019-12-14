@@ -90,6 +90,8 @@ private:
     Eigen::Vector3d forceBias;//力漂移
     Eigen::Vector3d torqueBias;//力矩漂移
 
+    double start_position[6];
+
 
 public:
      ImpedanceControl():robot_model_loader("robot_description"),
@@ -116,23 +118,20 @@ public:
         Eigen::Matrix3d WRIST2TMP,TMP2FORCE;
         WRIST2TMP<< 1,0,0, 0,0,1, 0,-1,0;
         TMP2FORCE<<0.5,sqrt(3)/2.,0, -sqrt(3)/2.,0.5,0, 0,0,1;
-        //TMP2FORCE<<-sqrt(3)/2.,0.5,0,-0.5,-sqrt(3)/2.,0,0,0,1;
+
         wrist2force = WRIST2TMP*TMP2FORCE;
 
-        //MF =10 BF =100
-        //MT =1 BT = 50
-        //这组参数抖动很小很小,不需要死区!!!!!
-        //好的莫名其妙.....
-        MF<<1,0.,0., 0.,1,0., 0.,0.,1; //10
-        BF<<0,0.,0., 0.,0,0., 0.,0.,0; //30 10 500
-        
-        MT<<0.5,0.,0., 0.,0.5,0., 0.,0.,0.5;
-        BT<<20,0.,0., 0.,20,0., 0.,0.,20;
-        //KF<<100.,0.,0., 0.,100.,0., 0.,0.,100.;
+        MF<< 0.,0.,0., 0.,0.,0., 0.,0.,0.; 
+        BF<< 0.,0.,0., 0.,0.,0., 0.,0.,0.;  
+        MT<< 0.,0.,0., 0.,0.,0., 0.,0.,0.;
+        BT<< 0.,0.,0., 0.,0.,0., 0.,0.,0;
+        cartesianForceTarget << 0.,0.,0.;
+        cartesianTorqueTarget <<0.0,0.,0.;
+
+
         currentCartesianForce << 0.,0.,0.;
         currentCartesianTorque << 0.,0.,0.;
-        cartesianForceTarget << 0,0,10;
-        cartesianTorqueTarget << 0,0,0;
+
         perErrInForce<<0.,0.,0.;
         perErrInTorque<<0.,0.,0.;
         velocity2world<<-1.,0.,0., 0.,-1.,0., 0.,0.,1.;//speedl 使用的坐标系和我自己订的坐标系相差[0,0,180](我->速度);
@@ -148,11 +147,20 @@ public:
         cartesianRPYFormer << 0,0,0;
     
     }
+
+    void init(){
+        getParam();
+    }
+
     bool initRobotState(){ //初始化robot 到基础位置
         group.setGoalJointTolerance(0.001);
         group.setMaxVelocityScalingFactor(0.1);
-        double angle[6]={-PI/2.,-PI/2.+0.18,-PI/2.+0.18,-PI/2.,PI/2.,0.};
-        std::vector<double> joint_value(angle,angle+6);
+        //double angle[6]={-PI/2.,-PI/2.+0.18,-PI/2.+0.18,-PI/2.,PI/2.,0.};
+        //double angle[6]={-90.,-85.,-80.,-103.,90.,3.};
+        std::vector<double> joint_value(start_position,start_position+6);
+        for(int i=0;i<6;i++){
+            joint_value[i] = joint_value[i]/180.*PI;
+        }
         group.setJointValueTarget(joint_value);
         planSuccess = group.plan(planner);
         if(planSuccess){
@@ -180,7 +188,6 @@ public:
         Eigen::Vector3d tmpTorque(msg.tx,msg.ty,msg.tz);
         rawTorque = tmpTorque;
         rawCartesianTorque = world2force*tmpTorque;
-        //ROS_INFO_STREAM("torque"<<rawCartesianTorque);
     }
 
     void deadZoom(Eigen::Vector3d& matrx,double range =0.5){
@@ -233,9 +240,6 @@ public:
         XYZVelocity << endVelocity(0,0),endVelocity(1,0),endVelocity(2,0);
         RPYVelocity << endVelocity(3,0),endVelocity(4,0),endVelocity(5,0);
 
-        // for(int i=0;i<3;i++){
-        //     currentSpeedRecordMsg.angle[i+3] = -1*XYZVelocity(i);
-        // }
         cartesianXYZTarget = (125*MF+BF).inverse()*(currentCartesianForce- cartesianForceTarget + 125*MF*cartesianXYZFormer); //currentCartesianForce- cartesianForceTarget
         cartesianXYZFormer = cartesianXYZTarget;
         for(int i=0;i<3;i++){
@@ -324,6 +328,7 @@ public:
     }
 
     void run(){
+        init();
         bool initDone =initRobotState(); //默认位置
         if(!initDone){
             ROS_INFO("robot init err, system shut down");
@@ -335,7 +340,6 @@ public:
         std::cin>>pause;
         int countTime=0;
         bool sensorBias =true; //当为true时候,采集bias的值;为false时候进入控制模式
-    
         while(ros::ok()){
             ros::spinOnce();
             kinematic_state->setVariablePositions(currentJointPosition);
@@ -343,8 +347,7 @@ public:
             tf =kinematic_state->getGlobalLinkTransform("wrist_3_link");
             world2force = tf.rotation()*wrist2force;
             Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
-            //ROS_INFO_STREAM("END POSITION "<<currentCartesianEndEffortPositon);
-            //ROS_INFO_STREAM("W2F"<<world2force);
+
             Eigen::Matrix<double,6,1>endvel=getEndVelocity();
             if(sensorBias && countTime<10){
                 if(rawCartesianForce(0)<0.0001 && rawCartesianForce(0)>-0.0001){
@@ -364,13 +367,13 @@ public:
                 impedanceControl();
                 //impedanceControlInSensorFrame();
             }
-            cartesianVelocityTargetMsg.points[0].accelerations[0]=1;
+            cartesianVelocityTargetMsg.points[0].accelerations[0]=3 ;
             for(int i=0;i<3;i++){
                 cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
-                cartesianVelocityTargetMsg.points[0].velocities[i+3] = -cartesianRPYTarget(i);//cartesianRPYTarget(i)
+                cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
 
-                currentSpeedRecordMsg.angle[i] = cartesianXYZTarget(i);
-                currentSpeedRecordMsg.angle[i+3] = endvel(i);
+                currentSpeedRecordMsg.angle[i] = rawForce(i);
+                currentSpeedRecordMsg.angle[i+3] = cartesianXYZTarget(i);
 
                 toolVelocityRecord[i] = cartesianXYZTarget(i);
                 toolVelocityRecord[i+3] = -cartesianRPYTarget(i);
@@ -383,6 +386,39 @@ public:
             loop_rate.sleep();
         }
         ros::waitForShutdown();
+    }
+    inline void getParam(){
+        nh_.param<double>("imp_mf/x",MF(0,0),100);
+        nh_.param<double>("imp_mf/y",MF(1,1),100);
+        nh_.param<double>("imp_mf/z",MF(2,2),100);
+
+        nh_.param<double>("imp_bf/x",BF(0,0),2000);
+        nh_.param<double>("imp_bf/y",BF(1,1),2000);
+        nh_.param<double>("imp_bf/z",BF(2,2),2000);
+
+        nh_.param<double>("imp_mt/x",MT(0,0),100);
+        nh_.param<double>("imp_mt/y",MT(1,1),100);
+        nh_.param<double>("imp_mt/z",MT(2,2),100);
+
+        nh_.param<double>("imp_bt/x",BT(0,0),2000);
+        nh_.param<double>("imp_bt/y",BT(1,1),2000);
+        nh_.param<double>("imp_bt/z",BT(2,2),2000);
+
+        nh_.param<double>("impedance_force_target/x",cartesianForceTarget(0),0);
+        nh_.param<double>("impedance_force_target/y",cartesianForceTarget(1),0);
+        nh_.param<double>("impedance_force_target/z",cartesianForceTarget(2),0);
+
+        nh_.param<double>("impedance_torque_target/x",cartesianTorqueTarget(0),0);
+        nh_.param<double>("impedance_torque_target/y",cartesianTorqueTarget(1),0);
+        nh_.param<double>("impedance_torque_target/z",cartesianTorqueTarget(2),0);
+
+        nh_.param<double>("start_position/x1",start_position[0],-90.);
+        nh_.param<double>("start_position/x2",start_position[1],-90.);
+        nh_.param<double>("start_position/x3",start_position[2],-90.);
+        nh_.param<double>("start_position/x4",start_position[3],-90.);
+        nh_.param<double>("start_position/x5",start_position[4],90.);
+        nh_.param<double>("start_position/x6",start_position[5],0.);
+
     }
 
 };
