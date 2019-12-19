@@ -91,6 +91,8 @@ private:
     Eigen::Vector3d torqueBias;//力矩漂移
 
     double start_position[6];
+    enum {APPROACHING=1,ROTATING,INSERTING} STATE;
+    double platform;
 
 
 public:
@@ -145,6 +147,8 @@ public:
 
         cartesianXYZFormer << 0,0,0;
         cartesianRPYFormer << 0,0,0;
+        platform =0.0;
+        STATE = APPROACHING;
     
     }
 
@@ -327,6 +331,34 @@ public:
 
     }
 
+    Eigen::Vector3d getEndPosition(){
+        kinematic_state->setVariablePositions(currentJointPosition);
+        kinematic_state->getJacobian(joint_model_group,kinematic_state->getLinkModel("wrist_3_link"),endEffectOffset,jacobian);
+        tf =kinematic_state->getGlobalLinkTransform("wrist_3_link");
+        world2force = tf.rotation()*wrist2force;
+        Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
+        return currentCartesianEndEffortPositon;
+    }
+    
+    void checkState(){ //判断插孔状态
+        Eigen::Vector3d currentCartesianEndEffortPositon = getEndPosition();
+        switch(STATE){
+            case APPROACHING:{
+                if(rawCartesianForce(2)>cartesianForceTarget(2)){
+                    platform = currentCartesianEndEffortPositon(2);
+                    STATE = ROTATING;
+                }
+            }break;
+            case ROTATING:{
+                if(platform-currentCartesianEndEffortPositon(2)>0.002 ||rawCartesianForce(2)< cartesianForceTarget(2)){
+                    STATE = INSERTING;
+                }
+            }break;
+            case INSERTING:break;
+            default:ROS_INFO_STREAM("ERROR");break;
+        }
+    }
+
     void run(){
         init();
         bool initDone =initRobotState(); //默认位置
@@ -342,12 +374,9 @@ public:
         bool sensorBias =true; //当为true时候,采集bias的值;为false时候进入控制模式
         while(ros::ok()){
             ros::spinOnce();
-            kinematic_state->setVariablePositions(currentJointPosition);
-            kinematic_state->getJacobian(joint_model_group,kinematic_state->getLinkModel("wrist_3_link"),endEffectOffset,jacobian);
-            tf =kinematic_state->getGlobalLinkTransform("wrist_3_link");
-            world2force = tf.rotation()*wrist2force;
-            Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
-
+            //Eigen::Vector3d currentCartesianEndEffortPositon = getEndPosition();
+            checkState();
+            //ROS_INFO_STREAM(currentCartesianEndEffortPositon);
             Eigen::Matrix<double,6,1>endvel=getEndVelocity();
             if(sensorBias && countTime<10){
                 if(rawCartesianForce(0)<0.0001 && rawCartesianForce(0)>-0.0001){
@@ -370,7 +399,11 @@ public:
             cartesianVelocityTargetMsg.points[0].accelerations[0]=3 ;
             for(int i=0;i<3;i++){
                 cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
+
                 cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
+
+                if(STATE ==ROTATING)
+                    cartesianVelocityTargetMsg.points[0].velocities[i+3]*=-1;
 
                 currentSpeedRecordMsg.angle[i] = rawForce(i);
                 currentSpeedRecordMsg.angle[i+3] = cartesianXYZTarget(i);
