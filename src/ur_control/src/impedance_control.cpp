@@ -89,9 +89,11 @@ private:
 
     Eigen::Vector3d forceBias;//力漂移
     Eigen::Vector3d torqueBias;//力矩漂移
+    Eigen::Vector3d MaxForce;
+    Eigen::Vector3d MaxTorque;
 
     double start_position[6];
-    enum {APPROACHING=1,ROTATING,INSERTING} STATE;
+    enum {APPROACHING=1,ROTATING,INSERTING,STOP} STATE;
     double platform;
 
 
@@ -149,6 +151,8 @@ public:
         cartesianRPYFormer << 0,0,0;
         platform =0.0;
         STATE = APPROACHING;
+        MaxForce<<50,50,50;
+        MaxTorque<<0.5,0.5,0.5;
     
     }
 
@@ -342,6 +346,21 @@ public:
     
     void checkState(){ //判断插孔状态
         Eigen::Vector3d currentCartesianEndEffortPositon = getEndPosition();
+
+        Eigen::Vector3d tmpforce = currentCartesianForce -MaxForce;
+        Eigen::Vector3d tmptorque = currentCartesianTorque - MaxTorque;
+        for(int i=0;i<3 && STATE!=STOP;i++){
+            if(tmpforce(i)>0 || tmptorque(i)>0)
+                STATE =STOP;
+        }
+
+        tmpforce = -MaxForce - currentCartesianForce;
+        tmptorque = - MaxTorque - currentCartesianTorque ;
+        for(int i=0;i<3 && STATE!=STOP;i++){
+            if(tmpforce(i)>0 || tmptorque(i)>0)
+                STATE = STOP;
+        }
+
         switch(STATE){
             case APPROACHING:{
                 if(rawCartesianForce(2)>cartesianForceTarget(2)){
@@ -354,69 +373,84 @@ public:
                     STATE = INSERTING;
                 }
             }break;
-            case INSERTING:break;
+            case INSERTING:{
+                if(platform-currentCartesianEndEffortPositon(2)>0.03){
+                    STATE=STOP;
+                }
+            }break;
+            case STOP:break;
             default:ROS_INFO_STREAM("ERROR");break;
         }
     }
 
     void run(){
         init();
-        bool initDone =initRobotState(); //默认位置
-        if(!initDone){
-            ROS_INFO("robot init err, system shut down");
-            return;
-        }
-        ROS_INFO("robot inited");
-        int pause;
-        ROS_INFO("push any key to continue :");
-        std::cin>>pause;
-        int countTime=0;
-        bool sensorBias =true; //当为true时候,采集bias的值;为false时候进入控制模式
-        while(ros::ok()){
-            ros::spinOnce();
-            //Eigen::Vector3d currentCartesianEndEffortPositon = getEndPosition();
-            checkState();
-            //ROS_INFO_STREAM(currentCartesianEndEffortPositon);
-            Eigen::Matrix<double,6,1>endvel=getEndVelocity();
-            if(sensorBias && countTime<10){
-                if(rawCartesianForce(0)<0.0001 && rawCartesianForce(0)>-0.0001){
+        while(1){
+            bool initDone =initRobotState(); //默认位置
+            if(!initDone){
+                ROS_INFO("robot init err, system shut down");
+                return;
+            }
+            ROS_INFO("robot inited");
+            int pause;
+            ROS_INFO("push any key to continue :");
+            std::cin>>pause;
+            int countTime=0;
+            bool sensorBias =true; //当为true时候,采集bias的值;为false时候进入控制模式
+            while(ros::ok()){
+                ros::spinOnce();
+                checkState();
+                ROS_INFO_STREAM("current state "<<STATE);
+                if(STATE ==STOP){ 
+                    Eigen::Vector3d currentPosition = getEndPosition();
+                    if(platform < currentPosition(2))
+                    break;
+                    else{
+                        for(int i=0;i<3;i++){
+                            cartesianVelocityTargetMsg.points[0].velocities[i] = 0;
+                            cartesianVelocityTargetMsg.points[0].velocities[i+3] = 0;
+                        }
+                        cartesianVelocityTargetMsg.points[0].velocities[2] = 0.05;
+                    }
                 }
                 else{
-                    for(int i=0;i<3;i++){
-                        forceBias(i) += rawCartesianForce(i)/10.;
-                        torqueBias(i) += rawCartesianTorque(i)/10.;
+                    Eigen::Matrix<double,6,1>endvel=getEndVelocity();
+                    if(sensorBias && countTime<10){
+                        if(rawCartesianForce(0)<0.0001 && rawCartesianForce(0)>-0.0001){
+                        }
+                        else{
+                            for(int i=0;i<3;i++){
+                                forceBias(i) += rawCartesianForce(i)/10.;
+                                torqueBias(i) += rawCartesianTorque(i)/10.;
+                            }
+                            countTime++;
+                            if(countTime==10)
+                                sensorBias=false;
+                        }
                     }
-                    countTime++;
-                    if(countTime==10)
-                        sensorBias=false;
+                    else{
+                        meanValueForceTorqueFilter();
+                        impedanceControl();
+                        //impedanceControlInSensorFrame();
+                    }
                 }
+                cartesianVelocityTargetMsg.points[0].accelerations[0]=3 ;
+                for(int i=0;i<3;i++){
+                    cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
+
+                    cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
+
+                    if(STATE ==ROTATING)
+                        cartesianVelocityTargetMsg.points[0].velocities[i+3]*=-1;
+
+                    currentSpeedRecordMsg.angle[i] = rawForce(i);
+                    currentSpeedRecordMsg.angle[i+3] = cartesianVelocityTargetMsg.points[0].velocities[i+3];
+                }
+                pub_speed.publish(cartesianVelocityTargetMsg);
+                pub_record.publish(currentSpeedRecordMsg);
+                loop_rate.sleep();
             }
-            else{
-                meanValueForceTorqueFilter();
-                impedanceControl();
-                //impedanceControlInSensorFrame();
-            }
-            cartesianVelocityTargetMsg.points[0].accelerations[0]=3 ;
-            for(int i=0;i<3;i++){
-                cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
 
-                cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
-
-                if(STATE ==ROTATING)
-                    cartesianVelocityTargetMsg.points[0].velocities[i+3]*=-1;
-
-                currentSpeedRecordMsg.angle[i] = rawForce(i);
-                currentSpeedRecordMsg.angle[i+3] = cartesianXYZTarget(i);
-
-                toolVelocityRecord[i] = cartesianXYZTarget(i);
-                toolVelocityRecord[i+3] = -cartesianRPYTarget(i);
-
-                cartesianForceRecord[i] = currentCartesianForce(i);
-                cartesianForceRecord[i+3] = currentCartesianTorque(i);
-            }
-            pub_speed.publish(cartesianVelocityTargetMsg);
-            pub_record.publish(currentSpeedRecordMsg);
-            loop_rate.sleep();
         }
         ros::waitForShutdown();
     }
