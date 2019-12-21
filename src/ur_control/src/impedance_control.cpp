@@ -73,9 +73,10 @@ protected:
 
     //其他变量
     Eigen::Vector3d endEffectOffset;//工作点相对wrist_3_Link的偏移量
-    Eigen::Matrix<double,3,3> MF,MT;
-    Eigen::Matrix<double,3,3> BF,BT;
-    Eigen::Matrix<double,3,3> KF,KT;
+    Eigen::Matrix<double,3,3> MF,BF;
+    Eigen::Matrix<double,3,3> MT,BT;
+    Eigen::Matrix<double,3,3> PF,DF;
+    Eigen::Matrix<double,3,3> PT,DT;
     double detaT;
 
 //临时变量,不对外开放
@@ -89,12 +90,13 @@ private:
 
     Eigen::Vector3d forceBias;//力漂移
     Eigen::Vector3d torqueBias;//力矩漂移
-    Eigen::Vector3d MaxForce;
+
+    Eigen::Vector3d MaxForce; //力/力矩上下限
     Eigen::Vector3d MaxTorque;
 
     double start_position[6];
-    enum {APPROACHING=1,ROTATING,INSERTING,STOP} STATE;
-    double platform;
+    enum {APPROACHING=1,ROTATING,INSERTING,PULLBACK,STOP} STATE;
+    double platform; //记录平台高度,用来配合判断插孔阶段
 
 
 public:
@@ -129,6 +131,13 @@ public:
         BF<< 0.,0.,0., 0.,0.,0., 0.,0.,0.;  
         MT<< 0.,0.,0., 0.,0.,0., 0.,0.,0.;
         BT<< 0.,0.,0., 0.,0.,0., 0.,0.,0;
+
+        PF<< 0.,0.,0., 0.,0.,0., 0.,0.,0.; 
+        PT<< 0.,0.,0., 0.,0.,0., 0.,0.,0.;
+
+        DF<< 0.,0.,0., 0.,0.,0., 0.,0.,0.;  
+        DT<< 0.,0.,0., 0.,0.,0., 0.,0.,0;
+
         cartesianForceTarget << 0.,0.,0.;
         cartesianTorqueTarget <<0.0,0.,0.;
 
@@ -149,7 +158,7 @@ public:
 
         cartesianXYZFormer << 0,0,0;
         cartesianRPYFormer << 0,0,0;
-        platform =0.0;
+        platform =0.0192;
         STATE = APPROACHING;
         MaxForce<<50,50,50;
         MaxTorque<<0.5,0.5,0.5;
@@ -215,31 +224,26 @@ public:
     }
     void impedanceControlPID(){
 
-        Eigen::Matrix<double,6,1> endVelocity = getEndVelocity();
-        Eigen::Matrix<double,3,1> XYZVelocity,RPYVelocity;
-        XYZVelocity << endVelocity(0,0),endVelocity(1,0),endVelocity(2,0);
-        RPYVelocity << endVelocity(3,0),endVelocity(4,0),endVelocity(5,0);
-        // XYZVelocity = velocity2world * XYZVelocity;
-        // RPYVelocity = velocity2world * RPYVelocity;
-        // 速度方向
-        for(int i=0;i<3;i++){
-            currentSpeedRecordMsg.angle[i+3] = -1*XYZVelocity(i);
-        }
-
         Eigen::Vector3d errInForce;
         Eigen::Vector3d errInTorque;
 
         errInForce= currentCartesianForce - cartesianForceTarget;//力和运动的方向是相同的
-        //deadZoom(errInForce,0.1);
         cartesianXYZTarget =MF*(errInForce-perErrInForce)*0.005+BF*errInForce*0.001;
         cartesianXYZTarget =velocity2world*cartesianXYZTarget;
         perErrInForce =errInForce;  
 
         errInTorque = currentCartesianTorque - cartesianTorqueTarget;
-       // deadZoom(errInTorque,0.002);
         cartesianRPYTarget = MT*(errInTorque - perErrInTorque)*5+BT*errInTorque*5;
         cartesianRPYTarget =velocity2world*cartesianRPYTarget;
         perErrInTorque =errInTorque;
+
+        if(cartesianXYZTarget(2)>0.1 || cartesianXYZTarget(2)<-0.1){
+            if(cartesianXYZTarget(2)>0.1)
+                cartesianXYZTarget(2) = 0.1;
+            else
+                cartesianXYZTarget(2) = -0.1;
+        }
+
     }
 
     void impedanceControl(){
@@ -258,19 +262,18 @@ public:
 
         cartesianRPYTarget =(125*MT+BT).inverse()*(currentCartesianTorque - cartesianTorqueTarget +125*MT*cartesianRPYFormer);
 
+        cartesianRPYFormer =cartesianRPYTarget;
+
+        cartesianXYZTarget =velocity2world*cartesianXYZTarget;
+
+        cartesianRPYTarget =velocity2world*cartesianRPYTarget;
+
         if(cartesianXYZTarget(2)>0.1 || cartesianXYZTarget(2)<-0.1){
             if(cartesianXYZTarget(2)>0.1)
                 cartesianXYZTarget(2) = 0.1;
             else
                 cartesianXYZTarget(2) = -0.1;
         }
-
-        cartesianRPYFormer =cartesianRPYTarget;
-
-        cartesianXYZTarget =velocity2world*cartesianXYZTarget;
-        
-
-        cartesianRPYTarget =velocity2world*cartesianRPYTarget;
     }
 
     void impedanceControlInSensorFrame(){ //在传感器坐标系下的阻抗控制
@@ -347,29 +350,30 @@ public:
     void checkState(){ //判断插孔状态
         Eigen::Vector3d currentCartesianEndEffortPositon = getEndPosition();
 
-        Eigen::Vector3d tmpforce = currentCartesianForce -MaxForce;
-        Eigen::Vector3d tmptorque = currentCartesianTorque - MaxTorque;
-        for(int i=0;i<3 && STATE!=STOP;i++){
-            if(tmpforce(i)>0 || tmptorque(i)>0)
-                STATE =STOP;
-        }
+        // Eigen::Vector3d tmpforce = currentCartesianForce -MaxForce;
+        // Eigen::Vector3d tmptorque = currentCartesianTorque - MaxTorque;
+        // for(int i=0;i<3 && STATE!=STOP;i++){
+        //     if(tmpforce(i)>0 || tmptorque(i)>0)
+        //         STATE =STOP;
+        // }
 
-        tmpforce = -MaxForce - currentCartesianForce;
-        tmptorque = - MaxTorque - currentCartesianTorque ;
-        for(int i=0;i<3 && STATE!=STOP;i++){
-            if(tmpforce(i)>0 || tmptorque(i)>0)
-                STATE = STOP;
-        }
-
+        // tmpforce = -MaxForce - currentCartesianForce;
+        // tmptorque = - MaxTorque - currentCartesianTorque ;
+        // for(int i=0;i<3 && STATE!=STOP;i++){
+        //     if(tmpforce(i)>0 || tmptorque(i)>0)
+        //         STATE = STOP;
+        // }
+        ROS_INFO_STREAM("end link position "<<currentCartesianEndEffortPositon);
         switch(STATE){
             case APPROACHING:{
-                if(rawCartesianForce(2)>cartesianForceTarget(2)){
+                if(currentCartesianForce(2)>cartesianForceTarget(2)){
                     platform = currentCartesianEndEffortPositon(2);
+                    ROS_INFO_STREAM("end link record "<<platform);
                     STATE = ROTATING;
                 }
             }break;
             case ROTATING:{
-                if(platform-currentCartesianEndEffortPositon(2)>0.002 ||rawCartesianForce(2)< cartesianForceTarget(2)){
+                if(platform-currentCartesianEndEffortPositon(2)>0.001 && currentCartesianForce(2)< cartesianForceTarget(2)){
                     STATE = INSERTING;
                 }
             }break;
@@ -383,9 +387,47 @@ public:
         }
     }
 
+    void pull_back(){  //回退到初始位置
+        while(ros:;ok()){
+            Eigen::Vector3d endposition = getEndPosition();
+            if(endposition(2) >platform){
+                break;
+            }
+            impedanceControlPID();
+            cartesianXYZTarget(2)=0.1;
+            bool flag =publicControlMessage();
+            loop_rate.sleep();
+        }
+        bool initDone =initRobotState(); //默认位置
+        if(!initDone){
+            ROS_INFO("robot init err, system shut down");
+            return;
+        }
+    }
+
+    bool publicControlMessage(){
+        cartesianVelocityTargetMsg.points[0].accelerations[0]=3 ;
+        for(int i=0;i<3;i++){
+
+            cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
+
+            cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
+
+            if(STATE ==ROTATING)
+                cartesianVelocityTargetMsg.points[0].velocities[i+3]*=-1;
+
+            currentSpeedRecordMsg.angle[i] = rawForce(i);
+            currentSpeedRecordMsg.angle[i+3] = currentCartesianForce(i);
+        }
+        pub_speed.publish(cartesianVelocityTargetMsg);
+        pub_record.publish(currentSpeedRecordMsg);
+        return true;
+    }
+
     void run(){
         init();
         while(1){
+            STATE =APPROACHING;
             bool initDone =initRobotState(); //默认位置
             if(!initDone){
                 ROS_INFO("robot init err, system shut down");
@@ -399,19 +441,10 @@ public:
             bool sensorBias =true; //当为true时候,采集bias的值;为false时候进入控制模式
             while(ros::ok()){
                 ros::spinOnce();
-                checkState();
+                //checkState();
                 ROS_INFO_STREAM("current state "<<STATE);
                 if(STATE ==STOP){ 
-                    Eigen::Vector3d currentPosition = getEndPosition();
-                    if(platform < currentPosition(2))
-                    break;
-                    else{
-                        for(int i=0;i<3;i++){
-                            cartesianVelocityTargetMsg.points[0].velocities[i] = 0;
-                            cartesianVelocityTargetMsg.points[0].velocities[i+3] = 0;
-                        }
-                        cartesianVelocityTargetMsg.points[0].velocities[2] = 0.05;
-                    }
+                    break;//跳出控制循环
                 }
                 else{
                     Eigen::Matrix<double,6,1>endvel=getEndVelocity();
@@ -430,30 +463,17 @@ public:
                     }
                     else{
                         meanValueForceTorqueFilter();
-                        impedanceControl();
-                        //impedanceControlInSensorFrame();
+                        impedanceControlPID();
                     }
                 }
-                cartesianVelocityTargetMsg.points[0].accelerations[0]=3 ;
-                for(int i=0;i<3;i++){
-                    cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
-
-                    cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
-
-                    if(STATE ==ROTATING)
-                        cartesianVelocityTargetMsg.points[0].velocities[i+3]*=-1;
-
-                    currentSpeedRecordMsg.angle[i] = rawForce(i);
-                    currentSpeedRecordMsg.angle[i+3] = cartesianVelocityTargetMsg.points[0].velocities[i+3];
-                }
-                pub_speed.publish(cartesianVelocityTargetMsg);
-                pub_record.publish(currentSpeedRecordMsg);
+                publicControlMessage();
                 loop_rate.sleep();
             }
 
         }
         ros::waitForShutdown();
     }
+
     inline void getParam(){
         nh_.param<double>("imp_mf/x",MF(0,0),100);
         nh_.param<double>("imp_mf/y",MF(1,1),100);
@@ -470,6 +490,22 @@ public:
         nh_.param<double>("imp_bt/x",BT(0,0),2000);
         nh_.param<double>("imp_bt/y",BT(1,1),2000);
         nh_.param<double>("imp_bt/z",BT(2,2),2000);
+
+        nh_.param<double>("pid_pf/x",PF(0,0),0);
+        nh_.param<double>("pid_pf/y",PF(1,1),0);
+        nh_.param<double>("pid_pf/z",PF(2,2),0);
+
+        nh_.param<double>("pid_df/x",DF(0,0),0);
+        nh_.param<double>("pid_df/y",DF(1,1),0);
+        nh_.param<double>("pid_df/z",DF(2,2),0);
+
+        nh_.param<double>("pid_pt/x",PT(0,0),0);
+        nh_.param<double>("pid_pt/y",PT(1,1),0);
+        nh_.param<double>("pid_pt/z",PT(2,2),0);
+
+        nh_.param<double>("pid_dt/x",DT(0,0),0);
+        nh_.param<double>("pid_dt/y",DT(1,1),0);
+        nh_.param<double>("pid_dt/z",DT(2,2),0);
 
         nh_.param<double>("impedance_force_target/x",cartesianForceTarget(0),0);
         nh_.param<double>("impedance_force_target/y",cartesianForceTarget(1),0);
