@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
 	 * than we can send them, the number here specifies how many messages to
 	 * buffer up before throwing some away.
 	 */
-	ros::Publisher chatter_pub = n.advertise<force_sensor::Force_Torque>("/force", 1);
+	ros::Publisher chatter_pub = n.advertise<force_sensor::Force_Torque>("/force", 10);
 	force_sensor::Force_Torque msgToSent;
 	msgToSent.fx=msgToSent.fy=msgToSent.fz=msgToSent.tx=msgToSent.ty=msgToSent.tz=0;
 	ros::Rate loop_rate(1000);

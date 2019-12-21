@@ -109,8 +109,8 @@ public:
 
         sub_force = nh_.subscribe("/force", 1, &ImpedanceControl::getNewForceTorque,this);
         sub_jointState =nh_.subscribe("/joint_states", 1 ,&ImpedanceControl::getNewJointState,this);
-        pub_speed =nh_.advertise<trajectory_msgs::JointTrajectory>("/ur_driver/joint_speed",1);// /ur_driver/joint_speed
-        pub_record=nh_.advertise<ur_control::jointSpeedRecord>("/joint_speed_record",1);// /joint_speed_record
+        pub_speed =nh_.advertise<trajectory_msgs::JointTrajectory>("/ur_driver/joint_speed",10);// /ur_driver/joint_speed
+        pub_record=nh_.advertise<ur_control::jointSpeedRecord>("/joint_speed_record",10);// /joint_speed_record
 
         cartesianVelocityTargetMsg.points.resize(1);
         cartesianVelocityTargetMsg.points[0].velocities.resize(6);
@@ -158,7 +158,7 @@ public:
 
         cartesianXYZFormer << 0,0,0;
         cartesianRPYFormer << 0,0,0;
-        platform =0.0192;
+        platform =0.192;
         STATE = APPROACHING;
         MaxForce<<50,50,50;
         MaxTorque<<0.5,0.5,0.5;
@@ -191,13 +191,17 @@ public:
     }
 
     void getNewJointState(const sensor_msgs::JointState& msg){//更新关节位置,关节速度
+        
         for(int i=0;i<6;i++)
             currentJointPosition[i] = msg.position[i];
         for(int i=0;i<6;i++)
             currentJointVelocity[i] =msg.velocity[i];
+        
+        renewKinState();
     }
 
     void getNewForceTorque(const force_sensor::Force_Torque& msg){//更新笛卡尔传感器力矩值
+
         Eigen::Vector3d tmpForce(msg.fx,msg.fy,msg.fz);
         rawForce = tmpForce;
         rawCartesianForce = world2force*tmpForce;
@@ -338,11 +342,16 @@ public:
 
     }
 
-    Eigen::Vector3d getEndPosition(){
+
+    void renewKinState(){
         kinematic_state->setVariablePositions(currentJointPosition);
         kinematic_state->getJacobian(joint_model_group,kinematic_state->getLinkModel("wrist_3_link"),endEffectOffset,jacobian);
         tf =kinematic_state->getGlobalLinkTransform("wrist_3_link");
         world2force = tf.rotation()*wrist2force;
+    }
+
+
+    Eigen::Vector3d getEndPosition(){
         Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
         return currentCartesianEndEffortPositon;
     }
@@ -388,13 +397,16 @@ public:
     }
 
     void pull_back(){  //回退到初始位置
-        while(ros:;ok()){
+        while(ros::ok()){
             Eigen::Vector3d endposition = getEndPosition();
+            ROS_INFO_STREAM(endposition);
             if(endposition(2) >platform){
+                ROS_INFO("BREAKUP");
                 break;
             }
+            ROS_INFO("PID PULLBACK");
             impedanceControlPID();
-            cartesianXYZTarget(2)=0.1;
+            cartesianXYZTarget(2)=0.01;
             bool flag =publicControlMessage();
             loop_rate.sleep();
         }
@@ -403,6 +415,7 @@ public:
             ROS_INFO("robot init err, system shut down");
             return;
         }
+        ROS_INFO("pull back successful");
     }
 
     bool publicControlMessage(){
@@ -437,21 +450,25 @@ public:
             int pause;
             ROS_INFO("push any key to continue :");
             std::cin>>pause;
+            if(pause==3)
+                STATE=PULLBACK;
             int countTime=0;
             bool sensorBias =true; //当为true时候,采集bias的值;为false时候进入控制模式
             while(ros::ok()){
                 ros::spinOnce();
                 //checkState();
                 ROS_INFO_STREAM("current state "<<STATE);
-                if(STATE ==STOP){ 
+                if(STATE ==STOP || STATE == PULLBACK){ 
                     break;//跳出控制循环
                 }
                 else{
-                    Eigen::Matrix<double,6,1>endvel=getEndVelocity();
+                    ROS_INFO("HERE");
                     if(sensorBias && countTime<10){
-                        if(rawCartesianForce(0)<0.0001 && rawCartesianForce(0)>-0.0001){
+                        if(rawCartesianForce(0)<0.00001 && rawCartesianForce(0)>-0.00001){
+                            ROS_INFO("force is zero");
                         }
                         else{
+                            ROS_INFO("MEAN FILTER");
                             for(int i=0;i<3;i++){
                                 forceBias(i) += rawCartesianForce(i)/10.;
                                 torqueBias(i) += rawCartesianTorque(i)/10.;
@@ -464,10 +481,15 @@ public:
                     else{
                         meanValueForceTorqueFilter();
                         impedanceControlPID();
+                        ROS_INFO("CONTROLLED");
                     }
                 }
+                ROS_INFO("SEND MESSAGE");
                 publicControlMessage();
                 loop_rate.sleep();
+            }
+            if(STATE==PULLBACK){
+                pull_back();
             }
 
         }
