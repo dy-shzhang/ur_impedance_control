@@ -403,18 +403,27 @@ public:
         int pause;
         ROS_INFO("push any key to continue :");
         std::cin>>pause;
+
+         Eigen::Matrix3d wrist2tool;
+        wrist2tool<< 1,0,0,0,0,1,0,-1,0;
+        cartesianPositionTargetMsg.points[0].accelerations[0]=0.5;
+        cartesianPositionTargetMsg.points[0].velocities[0]=0.1;
+
         while(ros::ok()){
             ros::spinOnce();
-            Eigen::Vector3d tcpPosition = getEndPosition();
-            Eigen::Vector3d tcpOriention = getEndOriention();
-            //ROS_INFO_STREAM("TCP POSITION "<<tcpPosition);
-            //ROS_INFO_STREAM("TCP ORIENTION "<<tcpOriention);
+            Eigen::Vector3d tcpPosition = velocity2world*getEndPosition();
+            Eigen::Vector3d tcpEuler = getEulerAngle(); // 获取欧拉角
+            Eigen::Matrix3d rotation = tf.rotation()*wrist2tool;
+            Eigen::AngleAxisd rotation_vector (velocity2world*rotation);
+            Eigen::Vector3d tcporientation = rotation_vector.angle()*rotation_vector.axis().transpose();
+            std::cout<<"vector" <<tcporientation<< std::endl;
+            std::cout<<" position "<<tcpPosition << std::endl;
             for(int i=0;i<3;i++){
                 cartesianPositionTargetMsg.points[0].positions[i] = tcpPosition(i);
-                cartesianPositionTargetMsg.points[0].positions[i+3] = tcpOriention(i);
+                cartesianPositionTargetMsg.points[0].positions[i+3] = tcporientation(i);
             }
-            cartesianPositionTargetMsg.points[0].positions[0] +=0.000002; 
-            //pub_position.publish(cartesianPositionTargetMsg);
+ 
+            pub_position.publish(cartesianPositionTargetMsg);
             loop_rate.sleep();
         }
         ros::waitForShutdown();
@@ -433,17 +442,32 @@ public:
 
     Eigen::Vector3d getEndPosition(){
         Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
-        ROS_INFO_STREAM(tf.rotation());
+        //ROS_INFO_STREAM(tf.rotation());
         return currentCartesianEndEffortPositon;
     }
 
-    Eigen::Vector3d getEndOriention(){
+    Eigen::Vector3d getEulerAngle(){
         // tcp oriention;
         Eigen::Matrix3d wrist2tool;
         wrist2tool<< 1,0,0,0,0,1,0,-1,0;
         Eigen::Matrix3d rotation = tf.rotation()*wrist2tool;
         Eigen::Vector3d currentCartesianEndEffortOriention = rotation.eulerAngles(2,1,0);
+
         return currentCartesianEndEffortOriention;
+    }
+
+    Eigen::Vector3d Rodrigues(Eigen::Matrix3d R){
+        double theta = acos((R.trace() - 1) * 0.5);	//待求的旋转向量的模长
+
+        Eigen::Matrix3d Right = (R - R.transpose()) * 0.5 / sin(theta);
+        Eigen::Vector3d r;	//待求的旋转向量的单位向量
+        r[0] = (Right(2,1) - Right(1,2))*0.5;
+        r[1] = (Right(0,2) - Right(2,0))*0.5;
+        r[2] = (Right(1,0) - Right(0,1))*0.5;
+        ROS_INFO_STREAM("theta"<<theta);
+        ROS_INFO_STREAM("axis "<< r);
+        ROS_INFO_STREAM("vector" << theta*r);
+        return r;
     }
     
     void checkState(){ //判断插孔状态
@@ -630,6 +654,6 @@ int main(int argc,char** argv){
     ImpedanceControl imp_;
     //imp_.run();
     //imp_.PTHybirControl();
-    imp_.impendancePosition();
+    imp_.impendancePosition(); //movel()不好用啊
     return 0;
 }
