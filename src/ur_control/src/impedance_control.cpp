@@ -233,7 +233,7 @@ public:
 
         rawCartesianForce = filterAlpha*rawCartesianForce + (1-filterAlpha)*formerCartesianForce; //低通滤波器
         formerCartesianForce = rawCartesianForce;
-        //ROS_INFO_STREAM(formerCartesianForce);
+        //std::cout<<"raw force "<<rawForce <<std::endl<<" world2force "<<world2force<<std::endl;
 
         Eigen::Vector3d tmpTorque(msg.tx,msg.ty,msg.tz);
         rawTorque = tmpTorque;
@@ -264,7 +264,7 @@ public:
 
         rawForce  = rawForce - world2force.inverse()*forceBias;
         rawTorque = rawTorque - world2force.inverse()*torqueBias;
-
+        //std::cout<<"rawForce "<<rawForce<<std::endl;
     }
     void impedanceControlPID(){
 
@@ -275,27 +275,23 @@ public:
         cartesianXYZTarget =DF*(errInForce-perErrInForce)+PF*errInForce;
         cartesianXYZTarget =velocity2world*cartesianXYZTarget;
         perErrInForce =errInForce;  
-        for(int i=0;i<3;i++){
-            if(errInForce(i)<0.5 && errInForce(i)>-0.5)
-                cartesianXYZTarget(i)=0.;
-        }
-
+        // for(int i=0;i<3;i++){
+        //     if(errInForce(i)<0.5 && errInForce(i)>-0.5)
+        //         cartesianXYZTarget(i)=0.;
+        // }
+        //std::cout<<"PID "<<PF<<std::endl;
 
         errInTorque = currentCartesianTorque - cartesianTorqueTarget;
         cartesianRPYTarget = DT*(errInTorque - perErrInTorque)+PT*errInTorque;
         cartesianRPYTarget =velocity2world*cartesianRPYTarget;
         perErrInTorque =errInTorque;
-        // for(int i=0;i<3;i++){
-        //     if(errInTorque(i)<0.5 && errInTorque(i)>-0.5)
-        //         cartesianRPYTarget(i)=0.;
-        // }
 
-        if(cartesianXYZTarget(2)>0.1 || cartesianXYZTarget(2)<-0.1){
-            if(cartesianXYZTarget(2)>0.1)
-                cartesianXYZTarget(2) = 0.1;
-            else
-                cartesianXYZTarget(2) = -0.1;
-        }
+        // if(cartesianXYZTarget(2)>0.1 || cartesianXYZTarget(2)<-0.1){
+        //     if(cartesianXYZTarget(2)>0.1)
+        //         cartesianXYZTarget(2) = 0.1;
+        //     else
+        //         cartesianXYZTarget(2) = -0.1;
+        // }
 
     }
 
@@ -388,8 +384,24 @@ public:
             loop_rate.sleep();
         }
         ros::waitForShutdown();
+    }
+
+
+    void impedanceControlPositionPID(Eigen::Vector3d& PositionAdd,Eigen::Vector3d& OrientAdd){
+
+        Eigen::Vector3d errInForce;
+        Eigen::Vector3d errInTorque;
+       // std::cout<<"force" <<currentCartesianForce<<std::endl;
+        errInForce= currentCartesianForce - cartesianForceTarget;//力和运动的方向是相同的
+        PositionAdd =DF*(errInForce-perErrInForce)+PF*errInForce;
+        perErrInForce =errInForce;  
+
+        errInTorque = currentCartesianTorque - cartesianTorqueTarget;
+        OrientAdd = DT*(errInTorque - perErrInTorque)+PT*errInTorque;
+        perErrInTorque =errInTorque;
 
     }
+
 
     void impendancePosition(){
         //tcp 的在tool0 link 中,和wrist_3_link rpy=[-90,0,0];
@@ -404,20 +416,25 @@ public:
         ROS_INFO("push any key to continue :");
         std::cin>>pause;
 
-         Eigen::Matrix3d wrist2tool;
+        Eigen::Matrix3d wrist2tool;
         wrist2tool<< 1,0,0,0,0,1,0,-1,0;
-        cartesianPositionTargetMsg.points[0].accelerations[0]=0.5;
-        cartesianPositionTargetMsg.points[0].velocities[0]=0.1;
-
+        cartesianPositionTargetMsg.points[0].accelerations[0]=1;
+        cartesianPositionTargetMsg.points[0].velocities[0]=0.25;
+        Eigen::Vector3d P,O;
         while(ros::ok()){
             ros::spinOnce();
-            Eigen::Vector3d tcpPosition = velocity2world*getEndPosition();
+            meanValueForceTorqueFilter();
+            impedanceControlPositionPID(P,O);
+            //Eigen::Vector3d tcpPosition = velocity2world*(getEndPosition()+P);
+            Eigen::Vector3d tcpPosition = (velocity2world*getEndPosition()+P);
+            //std::cout << "the add position "<<P<< std::endl;
             Eigen::Vector3d tcpEuler = getEulerAngle(); // 获取欧拉角
             Eigen::Matrix3d rotation = tf.rotation()*wrist2tool;
             Eigen::AngleAxisd rotation_vector (velocity2world*rotation);
             Eigen::Vector3d tcporientation = rotation_vector.angle()*rotation_vector.axis().transpose();
-            std::cout<<"vector" <<tcporientation<< std::endl;
+            std::cout<<"current postion " <<velocity2world*getEndPosition() << std::endl;
             std::cout<<" position "<<tcpPosition << std::endl;
+            std::cout << "the add position "<<P<< std::endl;
             for(int i=0;i<3;i++){
                 cartesianPositionTargetMsg.points[0].positions[i] = tcpPosition(i);
                 cartesianPositionTargetMsg.points[0].positions[i+3] = tcporientation(i);
@@ -426,6 +443,14 @@ public:
             pub_position.publish(cartesianPositionTargetMsg);
             loop_rate.sleep();
         }
+        
+        cartesianPositionTargetMsg.points[0].accelerations[0]=-1;
+        int count=0;
+        if(ros::ok())
+            std::cout<<"ros is ok"<<std::endl;
+        while(count++!=10)
+            pub_position.publish(cartesianPositionTargetMsg);
+        std::cout<<"here ros stoped"<<std::endl;
         ros::waitForShutdown();
 
     }
@@ -443,6 +468,7 @@ public:
     Eigen::Vector3d getEndPosition(){
         Eigen::Vector3d currentCartesianEndEffortPositon = tf.rotation()*endEffectOffset+tf.translation();
         //ROS_INFO_STREAM(tf.rotation());
+        std::cout<<"current end position "<<currentCartesianEndEffortPositon<<std::endl;
         return currentCartesianEndEffortPositon;
     }
 
@@ -473,7 +499,7 @@ public:
     void checkState(){ //判断插孔状态
         Eigen::Vector3d currentCartesianEndEffortPositon = getEndPosition();
 
-        ROS_INFO_STREAM("end link position "<<currentCartesianEndEffortPositon);
+        //ROS_INFO_STREAM("end link position "<<currentCartesianEndEffortPositon);
         switch(STATE){
             case APPROACHING:{
                 if(currentCartesianForce(2)>cartesianForceTarget(2)){
@@ -483,12 +509,12 @@ public:
                 }
             }break;
             case ROTATING:{
-                if(platform-currentCartesianEndEffortPositon(2)>0.001 && currentCartesianForce(2)< cartesianForceTarget(2)){
+                if(platform-currentCartesianEndEffortPositon(2)>0.020){
                     STATE = INSERTING;
                 }
             }break;
             case INSERTING:{
-                if(platform-currentCartesianEndEffortPositon(2)>0.03){
+                if(platform-currentCartesianEndEffortPositon(2)>0.04){
                     STATE=STOP;
                 }
             }break;
@@ -525,14 +551,15 @@ public:
 
             cartesianVelocityTargetMsg.points[0].velocities[i] = cartesianXYZTarget(i);//cartesianXYZTarget(i)
 
-            cartesianVelocityTargetMsg.points[0].velocities[i+3] = cartesianRPYTarget(i);//cartesianRPYTarget(i)
+            cartesianVelocityTargetMsg.points[0].velocities[i+3] = -cartesianRPYTarget(i);//cartesianRPYTarget(i)
 
-            if(STATE ==ROTATING)
-                cartesianVelocityTargetMsg.points[0].velocities[i+3]*=-1;
+            // if(STATE ==ROTATING)
+            //     cartesianVelocityTargetMsg.points[0].velocities[i+3]*=-1;
 
-            currentSpeedRecordMsg.angle[i] = cartesianRPYTarget(i);
+            currentSpeedRecordMsg.angle[i] = currentCartesianForce(i);
             currentSpeedRecordMsg.angle[i+3] = currentCartesianTorque(i);
         }
+        std::cout<<" target vel "<<cartesianXYZTarget<<std::endl;
         pub_speed.publish(cartesianVelocityTargetMsg);
         pub_record.publish(currentSpeedRecordMsg);
         return true;
@@ -578,11 +605,25 @@ public:
                         }
                     }
                     else{
+                        ROS_INFO("HERE RUNNING");   
                         meanValueForceTorqueFilter();
                         impedanceControlPID();
                     }
                 }
-
+                // if(STATE == ROTATING){
+                //     std::cout<<"Rotating "<<std::endl;
+                //     //cartesianRPYTarget*=-1;
+                // }
+                // else if(STATE == INSERTING){
+                //     //cartesianRPYTarget*=-1;
+                //     std::cout<<"Inserting "<<std::endl;
+                // }
+                // else if(STATE == STOP){
+                //     std::cout<<"STOP "<<std::endl;
+                //     Eigen::Vector3d zeros(0.,0.,0.);
+                //     cartesianXYZTarget = zeros;
+                //     cartesianRPYTarget = zeros;
+                // }
                 publicControlMessage();
                 loop_rate.sleep();
             }
@@ -595,37 +636,37 @@ public:
     }
 
     inline void getParam(){
-        nh_.param<double>("imp_mf/x",MF(0,0),100);
-        nh_.param<double>("imp_mf/y",MF(1,1),100);
-        nh_.param<double>("imp_mf/z",MF(2,2),100);
+        nh_.param<double>("imp_mf/x",MF(0,0),100.);
+        nh_.param<double>("imp_mf/y",MF(1,1),100.);
+        nh_.param<double>("imp_mf/z",MF(2,2),100.);
 
-        nh_.param<double>("imp_bf/x",BF(0,0),2000);
-        nh_.param<double>("imp_bf/y",BF(1,1),2000);
-        nh_.param<double>("imp_bf/z",BF(2,2),2000);
+        nh_.param<double>("imp_bf/x",BF(0,0),2000.);
+        nh_.param<double>("imp_bf/y",BF(1,1),2000.);
+        nh_.param<double>("imp_bf/z",BF(2,2),2000.);
 
-        nh_.param<double>("imp_mt/x",MT(0,0),100);
-        nh_.param<double>("imp_mt/y",MT(1,1),100);
-        nh_.param<double>("imp_mt/z",MT(2,2),100);
+        nh_.param<double>("imp_mt/x",MT(0,0),100.);
+        nh_.param<double>("imp_mt/y",MT(1,1),100.);
+        nh_.param<double>("imp_mt/z",MT(2,2),100.);
 
-        nh_.param<double>("imp_bt/x",BT(0,0),2000);
-        nh_.param<double>("imp_bt/y",BT(1,1),2000);
-        nh_.param<double>("imp_bt/z",BT(2,2),2000);
+        nh_.param<double>("imp_bt/x",BT(0,0),2000.);
+        nh_.param<double>("imp_bt/y",BT(1,1),2000.);
+        nh_.param<double>("imp_bt/z",BT(2,2),2000.);
 
-        nh_.param<double>("pid_pf/x",PF(0,0),0);
-        nh_.param<double>("pid_pf/y",PF(1,1),0);
-        nh_.param<double>("pid_pf/z",PF(2,2),0);
+        nh_.param<double>("pid_pf/x",PF(0,0),0.);
+        nh_.param<double>("pid_pf/y",PF(1,1),0.);
+        nh_.param<double>("pid_pf/z",PF(2,2),0.);
 
-        nh_.param<double>("pid_df/x",DF(0,0),0);
-        nh_.param<double>("pid_df/y",DF(1,1),0);
-        nh_.param<double>("pid_df/z",DF(2,2),0);
+        nh_.param<double>("pid_df/x",DF(0,0),0.);
+        nh_.param<double>("pid_df/y",DF(1,1),0.);
+        nh_.param<double>("pid_df/z",DF(2,2),0.);
 
-        nh_.param<double>("pid_pt/x",PT(0,0),0);
-        nh_.param<double>("pid_pt/y",PT(1,1),0);
-        nh_.param<double>("pid_pt/z",PT(2,2),0);
+        nh_.param<double>("pid_pt/x",PT(0,0),0.);
+        nh_.param<double>("pid_pt/y",PT(1,1),0.);
+        nh_.param<double>("pid_pt/z",PT(2,2),0.);
 
-        nh_.param<double>("pid_dt/x",DT(0,0),0);
-        nh_.param<double>("pid_dt/y",DT(1,1),0);
-        nh_.param<double>("pid_dt/z",DT(2,2),0);
+        nh_.param<double>("pid_dt/x",DT(0,0),0.);
+        nh_.param<double>("pid_dt/y",DT(1,1),0.);
+        nh_.param<double>("pid_dt/z",DT(2,2),0.);
 
         nh_.param<double>("impedance_force_target/x",cartesianForceTarget(0),0);
         nh_.param<double>("impedance_force_target/y",cartesianForceTarget(1),0);
@@ -652,8 +693,10 @@ int main(int argc,char** argv){
     ros::AsyncSpinner spinner(3);
     spinner.start();
     ImpedanceControl imp_;
-    //imp_.run();
+    imp_.init();
+    imp_.run();
     //imp_.PTHybirControl();
-    imp_.impendancePosition(); //movel()不好用啊
+    //imp_.impendancePosition(); 
+    //movel()不好用啊,似乎是位置偏差积分了,导致ctrl+c 后有极大的偏移,实在不知道哪出问题了;
     return 0;
 }

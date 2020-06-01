@@ -14,13 +14,19 @@ def ur_movel(p,a=0.12,v=0.02,t=0,r=0):
 
 p=[-0.11865,-0.46516,0.30444,0.0721,-3.1324,0.0551]
 
-
+count =0
 print(p)
 while(True):
+    count+=1
     ur_movel(p)
     print("order send")
-    time.sleep(0.008)
+    time.sleep(1)
     p2 = [0.11865,-0.46516,0.30444,0.0721,-3.1324,0.0551]
     ur_movel(p2)
     print("secondorder send")
-    time.sleep(0.008)
+    time.sleep(1)
+    if(count==5):
+        print("to stop")
+        str_command ="speedj([0.,0.,0.,0.,0.,0.],3,0)\n"
+        robot.send(str_command.encode())
+        break
