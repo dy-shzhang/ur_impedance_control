@@ -137,7 +137,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   #${Boost_INCLUDE_DIRS}
   /usr/include/eigen3
-# include
+  #include
 # ${catkin_INCLUDE_DIRS}
 )
 
@@ -278,5 +278,4 @@ add_executable(impedance_control
 add_dependencies(impedance_control ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(impedance_control
   ${catkin_LIBRARIES}
-  
 )

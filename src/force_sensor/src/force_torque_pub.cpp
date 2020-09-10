@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 	ros::Publisher chatter_pub = n.advertise<force_sensor::Force_Torque>("/force", 1);
 	force_sensor::Force_Torque msgToSent;
 	msgToSent.fx=msgToSent.fy=msgToSent.fz=msgToSent.tx=msgToSent.ty=msgToSent.tz=0;
-	ros::Rate loop_rate(1000);
+	ros::Rate loop_rate(125);
 
 	/**
 	 * A count of how many messages we have sent. This is used to create
@@ -77,44 +77,46 @@ int main(int argc, char *argv[])
 		 * This is a message object. You stuff it with data, and then publish it.
 		 */
 
-		int nc=0;
-		while(nc<11 && !(netft.getData(msg.fx,msg.fy,msg.fz,msg.tx,msg.ty,msg.tz))){
-			ROS_INFO("Force_Torque again");
-			nc++;
-		}
-		if(nc==11){
-			msg =oldmsg;
-			ROS_INFO("KONG 11");
-		}
-		else{
-			oldmsg =msg;
-			ROS_INFO("FEI KONG");		
-		}
+		// int nc=0;
+		// while(nc<11 && !(netft.getData(msg.fx,msg.fy,msg.fz,msg.tx,msg.ty,msg.tz))){
+		// 	ROS_INFO("Force_Torque again");
+		// 	nc++;
+		// }
+		// if(nc==11){
+		// 	msg =oldmsg;
+		// 	ROS_INFO("KONG 11");
+		// }
+		// else{
+		// 	oldmsg =msg;
+		// 	ROS_INFO("FEI KONG");		
+		// }
 
-		{
-			msgToSent.fx += msg.fx/4.;
-			msgToSent.fy += msg.fy/4.;
-			msgToSent.fz += msg.fz/4.;
+		// {
+		// 	msgToSent.fx += msg.fx/4.;
+		// 	msgToSent.fy += msg.fy/4.;
+		// 	msgToSent.fz += msg.fz/4.;
 
-			msgToSent.tx += msg.tx/4.;
-			msgToSent.ty += msg.ty/4.;
-			msgToSent.tz += msg.tz/4.;
-		}
-		//ROS_INFO("%s", msg.data.c_str());
+		// 	msgToSent.tx += msg.tx/4.;
+		// 	msgToSent.ty += msg.ty/4.;
+		// 	msgToSent.tz += msg.tz/4.;
+		// }
+		// //ROS_INFO("%s", msg.data.c_str());
 
-		/**
-		 * The publish() function is how you send messages. The parameter
-		 * is the message object. The type of this object must agree with the type
-		 * given as a template parameter to the advertise<>() call, as was done
-		 * in the constructor above.
-		 */
-		 if(count==3){
-			 chatter_pub.publish(msgToSent);
-			 msgToSent.fx=msgToSent.fy=msgToSent.fz=msgToSent.tx=msgToSent.ty=msgToSent.tz=0;
-			 count=0;
-		 }
-		 else
-		 	count++;
+		// /**
+		//  * The publish() function is how you send messages. The parameter
+		//  * is the message object. The type of this object must agree with the type
+		//  * given as a template parameter to the advertise<>() call, as was done
+		//  * in the constructor above.
+		//  */
+		//  if(count==3){
+		// 	 chatter_pub.publish(msgToSent);
+		// 	 msgToSent.fx=msgToSent.fy=msgToSent.fz=msgToSent.tx=msgToSent.ty=msgToSent.tz=0;
+		// 	 count=0;
+		//  }
+		//  else
+		//  	count++;
+		while(!netft.getData(msg.fx,msg.fy,msg.fz,msg.tx,msg.ty,msg.tz));
+		chatter_pub.publish(msg);
 		ros::spinOnce();
 		loop_rate.sleep();
 	}

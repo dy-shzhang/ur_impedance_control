@@ -1,7 +1,0 @@
-<launch>
-
- <node name="ur_imp_run" pkg="ur_control" type="impedance_control" output="screen" />
-
- <rosparam file="$(find ur_control)/config/impParam.yaml" command="load" />
-
-</launch>
