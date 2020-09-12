@@ -107,6 +107,7 @@ private:
 	Eigen::Matrix3d LOCALMATRIX; //单位矩阵
 	Eigen::Vector3d GRAVITYFORCE;
 
+    Eigen::Matrix3d P_Gcenter_grap;
 
 	Eigen::Vector3d formerCartesianForce; //记录力,世界坐标系下
 	Eigen::Vector3d formerCartesianTorque;//当前末端笛卡尔力矩
@@ -196,7 +197,8 @@ public:
 		perErrInForce << 0., 0., 0.;
 		perErrInTorque << 0., 0., 0.;
 		velocity2world << -1., 0., 0., 0., -1., 0., 0., 0., 1.;//speedl 使用的坐标系和我自己订的坐标系相差[0,0,180](我->速度);
-
+        //P_Gcenter_grap << 0., -0.0576, 0.0002, 0.0576, 0., 0.0051, -0.0002, -0.0051, 0.;
+		P_Gcenter_grap <<1.,0.,0.,0.,1.,0.,0.,0.,1.;
 	   // world2base =world2base*velocity2world;
 		forceBias << 0, 0, 0;
 		torqueBias << 0, 0, 0;
@@ -278,6 +280,7 @@ public:
 		//         rawCartesianForce(i) = formerCartesianForce(i);
 		//     }
 		// }
+
 		rawCartesianForce = filterAlpha * rawCartesianForce + (1 - filterAlpha)*formerCartesianForce; //低通滤波器
 		formerCartesianForce = tmpformer;
 		//std::cout<<"raw force "<<rawForce <<std::endl<<" world2force "<<world2force<<std::endl;
@@ -285,14 +288,17 @@ public:
 		Eigen::Vector3d tmpTorque(msg.tx, msg.ty, msg.tz);
 		rawTorque = tmpTorque;
 		//rawCartesianTorque = world2force*tmpTorque;
+		//Eigen::Matrix3d P_Gcenter_grap << 0., -0.0576, 0.0002, 0.0576, 0., 0.0051, -0.0002, -0.0051, 0.;
+		//rawCartesianTorque = tmpTorque + P_Gcenter_grap*(LOCALMATRIX.inverse() - tmpR.inverse())*GRAVITYFORCE;
+
 		rawCartesianTorque = tmpTorque;
 
-		for (int i = 0; i < 3; i++) {
-			if (rawCartesianTorque(i) > 200 || rawCartesianTorque(i) < -200) {
-				rawCartesianTorque = formerCartesianTorque;
-				break;
-			}
-		}
+		// for (int i = 0; i < 3; i++) {
+		// 	if (rawCartesianTorque(i) > 200 || rawCartesianTorque(i) < -200) {
+		// 		rawCartesianTorque = formerCartesianTorque;
+		// 		break;
+		// 	}
+		// }
 		rawCartesianTorque = filterAlpha * rawCartesianTorque + (1 - filterAlpha)*formerCartesianTorque; //低通滤波器
 		formerCartesianTorque = rawCartesianTorque;
 	}
@@ -449,7 +455,7 @@ public:
 
 	bool publicControlMessage() {
 		Eigen::Matrix<double, 6, 1> endEffortVel = getEndVelocity();
-		cartesianVelocityTargetMsg.points[0].accelerations[0] = 1.;
+		cartesianVelocityTargetMsg.points[0].accelerations[0] = 1.5;
 		for (int i = 0; i < 3; i++) {
 
 			cartesianVelocityTargetMsg.points[0].velocities[i] = getSimplyCommand(cartesianXYZTarget(i));;//cartesianXYZTarget(i), getSimplyCommand(cartesianXYZTarget(i));
@@ -483,8 +489,8 @@ public:
 
 	std::vector<std::vector<int>> getTcpOfRotation(int _range) {
 		std::vector<std::vector<int>> command;
-		for (int i = -_range; i <= _range; i+=10) {
-			for (int j = -_range; j <= _range; j+=10) {
+		for (int i = -_range; i <= _range; i+=20) {
+			for (int j = -_range; j <= _range; j+=20) {
 				std::vector<int>tmp{ i,j };
 				command.push_back(tmp);
 			}
@@ -534,10 +540,11 @@ public:
 	}
 
 	void sampleData() {
-		init();
-		std::vector<std::vector<int>> u = getTcpOfRotation(500);
+		//init();
+		std::vector<std::vector<int>> u = getTcpOfRotation(100);
 		for(std::vector<int> control:u){
 			fn = openFile("/home/amax/Desktop/ur_ws_zsh/data/forcetorque"+std::to_string(control[0])+"+"+ std::to_string(control[1])+".txt");
+			init();
 			bool initDone = initRobotState(); //默认位置
 			if (!initDone) {
 				ROS_INFO("robot init err, system shut down");
@@ -552,7 +559,8 @@ public:
 			bool sensorBias = true; //当为true时候,采集bias的值;为false时候进入控制模式
 			while (ros::ok()) {
 				ros::spinOnce();
-				auto curForce =world2base*world2force*currentCartesianForce;
+				auto curForce = world2base*world2force*currentCartesianForce;
+				auto curTorque = world2base*world2force*currentCartesianTorque;
 				if (sensorBias && countTime < 10) {
 					if (rawCartesianForce(0) < 0.00001 && rawCartesianForce(0) > -0.00001) {
 						ROS_INFO("HERE");
@@ -570,26 +578,26 @@ public:
 					meanValueForceTorqueFilter();
 					if (countTime <= 10 + abs(control[0])) {
 						cartesianRPYTarget(0) = 0.;
-						cartesianRPYTarget(1) = 0.08*(control[0] / abs(control[0]));
+						cartesianRPYTarget(1) = 0.1*(control[0] / abs(control[0]));
 						cartesianRPYTarget(2) = 0.;
 						cartesianXYZTarget(0) = 0.;
 						cartesianXYZTarget(1) = 0.;
 						cartesianXYZTarget(2) = 0.;
-						std::cout<<"rotation p = "<<cartesianRPYTarget(1)<<std::endl;
+						//std::cout<<"rotation p = "<<cartesianRPYTarget(1)<<std::endl;
 						cartesianRPYTarget = velocity2world*world2base.inverse()*cartesianRPYTarget;
 					}
 					else if (countTime <= 10 + abs(control[0]) + abs(control[1])) {
-						cartesianRPYTarget(0) = 0.08*(control[1]/abs(control[1]));
+						cartesianRPYTarget(0) = 0.1*(control[1]/abs(control[1]));
 						cartesianRPYTarget(1) = 0.;
 						cartesianRPYTarget(2) = 0.;
 						cartesianXYZTarget(0) = 0.;
 						cartesianXYZTarget(1) = 0.;
 						cartesianXYZTarget(2) = 0.;
-						std::cout<<"rotation p = "<<cartesianRPYTarget(2)<<std::endl;
+						//std::cout<<"rotation p = "<<cartesianRPYTarget(2)<<std::endl;
 						cartesianRPYTarget = velocity2world*world2base.inverse()*cartesianRPYTarget;
 					}
 					 else{
-						writeData(fn);
+						//writeData(fn);
 						impedanceContrl();
 						if(smp || curForce(2)>cartesianForceTarget(2))
 							smp++;
@@ -600,10 +608,12 @@ public:
 						else
 							cartesianXYZTarget(2) = -0.02;
 					}
+					std::cout<<"true torque "<<curTorque<<std::endl;
 					std::cout<<"true force "<<curForce<<std::endl;
 				}
+				writeData(fn);
 				countTime++;
-			    if(smp>200){
+			    if(smp> 200){
 					cartesianRPYTarget(0) = 0.;
 					cartesianRPYTarget(1) = 0.;
 					cartesianRPYTarget(2) = 0.;
@@ -612,7 +622,7 @@ public:
 					cartesianXYZTarget(2) = 0.05;
 					cartesianXYZTarget = velocity2world*world2base.inverse()*cartesianXYZTarget;
 				}
-				if(smp>250)
+				if(smp>240)
 					break;
 				publicControlMessage();
 				loop_rate.sleep();
@@ -738,6 +748,10 @@ public:
 
 		for (int i = 0; i < 6; ++i) {
 			currentJointPosition[i] = start_position[i] /180.*PI;
+		}
+		for (int i = 0; i < 3; i++) {
+			forceBias(i) =0.;
+			torqueBias(i) =0.;
 		}
 	}
 
